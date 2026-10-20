@@ -12,17 +12,28 @@ import  cv2
 from collections import OrderedDict
 
 dataset = 'JHU'
-dataRoot = '../ProcessedData/' + dataset
+repo_root = os.path.dirname(os.path.abspath(__file__))
+dataRoot = os.path.join(repo_root, '..', 'ProcessedData', dataset)
 test_list = 'test.txt'
 
 GPU_ID = '2,3'
 os.environ["CUDA_VISIBLE_DEVICES"] = GPU_ID
 torch.backends.cudnn.benchmark = True
 
-netName = 'HR_Net' # options: HR_Net,VGG16_FPN
-model_path = './exp/01-03_13-54_JHU_HR_Net/ep_305_F1_0.676_Pre_0.764_Rec_0.607_mae_74.5_mse_332.6.pth'
+netName = 'VGG16_FPN' # options: HR_Net,VGG16_FPN
+model_path = os.path.join(repo_root, 'exp', 'cpu_JHU_VGG16_FPN', 'latest.pth')
 
-out_file_name= './saved_exp_results/' + dataset + '_' + netName + '_' + test_list
+localizer = 'margin_gated'  # options: margin_gated (new algorithm), opencv (original baseline)
+
+if localizer == 'margin_gated':
+    import sys
+    sys.path.insert(0, os.path.join(repo_root, '..', 'iim-dense2sparse-fpga'))
+    from reference_algorithm.margin_gated_ccl import margin_gated_binarize, streaming_ccl
+
+result_suffix = '' if localizer == 'opencv' else '_' + localizer
+out_file_name = os.path.join(
+    repo_root, 'saved_exp_results',
+    dataset + '_' + netName + '_' + os.path.splitext(test_list)[0] + result_suffix + '.txt')
 
 
 if dataset == 'NWPU':
@@ -52,6 +63,8 @@ def main():
     txtpath = os.path.join(dataRoot, test_list)
     with open(txtpath) as f:
         lines = f.readlines()                            
+    os.makedirs(os.path.dirname(out_file_name), exist_ok=True)
+    open(out_file_name, 'w').close()
     test(lines, model_path)
 
 
@@ -69,12 +82,20 @@ def get_boxInfo_from_Binar_map(Binar_numpy, min_area=3):
     return pre_data, boxes
 
 
+def get_points_margin_gated(pred_map, pred_threshold, min_area=3):
+    B = margin_gated_binarize(pred_map.squeeze().numpy(), pred_threshold.squeeze().numpy())
+    components = streaming_ccl(B, min_area=min_area)
+    points = [(c.x, c.y) for c in components]
+    return {'num': len(points), 'points': points}
+
+
 def test(file_list, model_path):
 
     net = Crowd_locator(netName,GPU_ID,pretrained=True)
-    net.cuda()
-    state_dict = torch.load(model_path)
-    if len(GPU_ID.split(','))>1:
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    net = net.to(device)
+    state_dict = torch.load(model_path, map_location=device)
+    if isinstance(net.Extractor, torch.nn.DataParallel):
         net.load_state_dict(state_dict)
     else:
         new_state_dict = OrderedDict()
@@ -100,7 +121,7 @@ def test(file_list, model_path):
         slice_h, slice_w = 512,1024
         slice_h, slice_w = slice_h, slice_w
         with torch.no_grad():
-            img = Variable(img).cuda()
+            img = Variable(img).to(device)
             b, c, h, w = img.shape
             crop_imgs, crop_dots, crop_masks = [], [], []
             if h * w < slice_h * 2 * slice_w * 2 and h % 16 == 0 and w % 16 == 0:
@@ -154,11 +175,13 @@ def test(file_list, model_path):
                 pred_map = (pred_map / mask)
                 pred_threshold = (pred_threshold / mask)
 
-            a = torch.ones_like(pred_map)
-            b = torch.zeros_like(pred_map)
-            binar_map = torch.where(pred_map >= pred_threshold, a, b)
-
-            pred_data, boxes = get_boxInfo_from_Binar_map(binar_map.cpu().numpy())
+            if localizer == 'margin_gated':
+                pred_data = get_points_margin_gated(pred_map.cpu(), pred_threshold.cpu())
+            else:
+                a = torch.ones_like(pred_map)
+                b = torch.zeros_like(pred_map)
+                binar_map = torch.where(pred_map >= pred_threshold, a, b)
+                pred_data, boxes = get_boxInfo_from_Binar_map(binar_map.cpu().numpy())
 
             with open(out_file_name, 'a') as f:
 
@@ -176,7 +199,4 @@ def test(file_list, model_path):
 
 if __name__ == '__main__':
     main()
-
-
-
 

@@ -36,7 +36,7 @@ class Trainer():
 
         self.epoch = 0
         self.i_tb = 0
-        self.num_iters = cfg.MAX_EPOCH * np.int(len(self.train_loader))
+        self.num_iters = cfg.MAX_EPOCH * int(len(self.train_loader))
 
 
         if cfg.RESUME:

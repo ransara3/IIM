@@ -10,8 +10,8 @@ import glob
 from functions import euclidean_dist,  generate_cycle_mask, average_del_min
 cycle = False
 
-Root = '/media/D/GJY/ht/ProcessedData/JHU'
-dst_Root = '/media/D/GJY/ht/ProcessedData/JHU'
+Root = '/home/ransara/Desktop/RansaraData/kaust/jhu_crowd_v2.0'
+dst_Root = '/home/ransara/Desktop/RansaraData/kaust/ProcessedData/JHU'
 
 
 
@@ -35,7 +35,7 @@ def resize_images(mode):
     imgs_path = os.path.join(Root, mode, 'images')
     gt_path = os.path.join(Root, mode, 'gt')
     mni_size = (1024, 768)
-    file_list = os.listdir(imgs_path)
+    file_list = [f for f in os.listdir(imgs_path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
     print(len(file_list))
     for imgName in file_list:
         img_id = imgName.split('.')[0]
@@ -350,6 +350,8 @@ def loc_gt_make(  mode = 'test'):
 def JHU_list_make(mode):
     path = os.path.join(Root,mode,'images')
     for filname in os.listdir(path):
+        if not filname.lower().endswith(('.jpg', '.jpeg', '.png')):
+            continue
         filname = filname.split('.')[0]
         with open(dst_Root+'/'+mode+'.txt','a') as f:
             f.write(filname + '\n')

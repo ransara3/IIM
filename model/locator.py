@@ -19,14 +19,15 @@ class Crowd_locator(nn.Module):
             self.Extractor = VGG16_FPN()
             self.Binar = BinarizedModule(input_channels=768)
 
-        if len(gpu_id) > 1:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if device.type == 'cuda' and len(gpu_id) > 1:
             self.Extractor = torch.nn.DataParallel(self.Extractor).cuda()
             self.Binar = torch.nn.DataParallel(self.Binar).cuda()
         else:
-            self.Extractor = self.Extractor.cuda()
-            self.Binar = self.Binar.cuda()
+            self.Extractor = self.Extractor.to(device)
+            self.Binar = self.Binar.to(device)
 
-        self.loss_BCE = nn.BCELoss().cuda()
+        self.loss_BCE = nn.BCELoss().to(device)
 
     @property
     def loss(self):

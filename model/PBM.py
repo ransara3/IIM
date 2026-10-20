@@ -9,8 +9,8 @@ class BinarizedF(Function):
   @staticmethod
   def forward(ctx, input, threshold):
     ctx.save_for_backward(input,threshold)
-    a = torch.ones_like(input).cuda()
-    b = torch.zeros_like(input).cuda()
+    a = torch.ones_like(input)
+    b = torch.zeros_like(input)
     output = torch.where(input>=threshold,a,b)
     return output
 
